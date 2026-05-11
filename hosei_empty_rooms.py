@@ -23,6 +23,7 @@ import json
 import re
 import sys
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -51,6 +52,31 @@ def _cache_dir() -> Path:
 
 
 CACHE_FILE = _cache_dir() / "hosei_rooms_cache.json"
+
+# -----------------------------------------------------------------------
+# 教室名 正規化
+# -----------------------------------------------------------------------
+def normalize_room(raw: str) -> str | None:
+    """
+    教室名を正規化する。
+
+    1. 全角→半角変換 (NFKC)
+    2. 「英字 + 3〜4桁数字」のパターンを抽出
+       例: "小東館-E206" → "E206"
+           "市BT-0505"  → "BT0505"
+           "Ａ３０１"   → "A301"
+    3. パターンが見つからない場合は None（除外対象）
+
+    これにより研究室名・CALL教室・集中講義等が自動除外される。
+    """
+    # 全角→半角（NFKC: Ａ→A、２→2 など）
+    s = unicodedata.normalize("NFKC", raw.strip())
+    # 英字1文字以上 + スペース/ハイフン(省略可) + 3〜4桁数字
+    m = re.search(r"([A-Za-z]+)\s*-?\s*(\d{3,4})", s)
+    if not m:
+        return None
+    return m.group(1).upper() + m.group(2)
+
 
 # -----------------------------------------------------------------------
 # 学部名 → キャンパス 対応表
@@ -296,19 +322,19 @@ def find_empty_rooms(
     if campus and campus != "全キャンパス":
         courses = [c for c in courses if c.get("campus") == campus]
 
-    # 全教室（URL・空欄・ダッシュを除外）
+    # 全教室（正規化: 英字+3〜4桁数字パターン以外は除外）
     all_rooms: set[str] = set()
     for c in courses:
-        room = c.get("classroom", "").strip()
-        if room and not room.startswith("http") and room not in {"-", "―", ""}:
+        room = normalize_room(c.get("classroom", ""))
+        if room:
             all_rooms.add(room)
 
     # 該当コマで使用中の教室
     used_rooms: set[str] = set()
     for c in courses:
         if (youbi, jigen) in parse_day_period(c.get("day_period", "")):
-            room = c.get("classroom", "").strip()
-            if room and not room.startswith("http") and room not in {"-", "―", ""}:
+            room = normalize_room(c.get("classroom", ""))
+            if room:
                 used_rooms.add(room)
 
     return sorted(all_rooms - used_rooms), sorted(used_rooms), sorted(all_rooms)
