@@ -316,25 +316,30 @@ def find_empty_rooms(
             "キャッシュがありません。先に「キャッシュ再構築」を実行してください。"
         )
 
-    courses = cache["courses"]
+    all_courses = cache["courses"]
 
-    # キャンパスフィルタ
+    # --- 全教室リスト: キャンパスフィルタあり ---
+    # 学部→キャンパス推定でそのキャンパスの教室名を絞り込む
     if campus and campus != "全キャンパス":
-        courses = [c for c in courses if c.get("campus") == campus]
+        campus_courses = [c for c in all_courses if c.get("campus") == campus]
+    else:
+        campus_courses = all_courses
 
-    # 全教室（正規化: 英字+3〜4桁数字パターン以外は除外）
     all_rooms: set[str] = set()
-    for c in courses:
+    for c in campus_courses:
         room = normalize_room(c.get("classroom", ""))
         if room:
             all_rooms.add(room)
 
-    # 該当コマで使用中の教室
+    # --- 使用中教室: 全コースで判定 ---
+    # キャンパス推定が不正確でも漏れが出ないよう、
+    # フィルタなしの全コースから該当コマの使用室を洗い出し、
+    # そのキャンパスの教室リスト(all_rooms)に含まれるものだけ残す。
     used_rooms: set[str] = set()
-    for c in courses:
+    for c in all_courses:
         if (youbi, jigen) in parse_day_period(c.get("day_period", "")):
             room = normalize_room(c.get("classroom", ""))
-            if room:
+            if room and room in all_rooms:
                 used_rooms.add(room)
 
     return sorted(all_rooms - used_rooms), sorted(used_rooms), sorted(all_rooms)
