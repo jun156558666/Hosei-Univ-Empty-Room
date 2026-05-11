@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
+
+# 環境
+.env
+venv/
+.venv/
+
+# キャッシュ（大きすぎる場合はコメントアウトを外す）
+# hosei_rooms_cache.json
+
+# OS
+.DS_Store
+Thumbs.db

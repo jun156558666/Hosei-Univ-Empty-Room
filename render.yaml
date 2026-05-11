@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: hosei-empty-rooms
+    runtime: python
+    buildCommand: pip install -r requirements_web.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: ADMIN_TOKEN
+        generateValue: true   # Render が自動生成（後でダッシュボードで確認）
+    autoDeploy: true
