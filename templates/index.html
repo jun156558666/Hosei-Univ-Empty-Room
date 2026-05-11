@@ -75,6 +75,17 @@
 
 <body class="bg-slate-50 min-h-screen" x-data="app()" x-init="init()">
 
+  <!-- サーバー起動中オーバーレイ -->
+  <div x-show="waking" x-transition.opacity
+       class="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center gap-6">
+    <div class="w-14 h-14 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
+    <div class="text-center">
+      <p class="text-blue-800 font-bold text-lg">サーバー起動中...</p>
+      <p class="text-slate-500 text-sm mt-1">初回アクセス時は少し時間がかかります</p>
+      <p class="text-slate-400 text-xs mt-3" x-text="`再試行まで ${retryCountdown} 秒`"></p>
+    </div>
+  </div>
+
   <!-- ヘッダー -->
   <header class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-20">
     <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -264,12 +275,14 @@
 
       return {
         // --- 状態 ---
-        loading:    false,
-        error:      null,
-        result:     null,
-        tab:        'empty',
-        copied:     false,
-        cacheInfo:  { has_cache: false },
+        loading:       false,
+        error:         null,
+        result:        null,
+        tab:           'empty',
+        copied:        false,
+        cacheInfo:     { has_cache: false },
+        waking:        false,       // サーバー起動中フラグ
+        retryCountdown: 0,          // カウントダウン表示
 
         // --- パラメータ ---
         params: {
@@ -289,12 +302,37 @@
           await this.fetchStatus();
         },
 
-        // --- キャッシュ状態 ---
+        // --- キャッシュ状態（サーバー起動待ちリトライ付き）---
         async fetchStatus() {
-          try {
-            const r = await fetch(`/api/status?nendo=${this.params.nendo}`);
-            this.cacheInfo = await r.json();
-          } catch (_) {}
+          const MAX_RETRIES = 20;   // 最大100秒待機
+          const RETRY_SEC   = 5;
+
+          for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            try {
+              const r = await fetch(`/api/status?nendo=${this.params.nendo}`);
+              if (r.ok) {
+                this.cacheInfo = await r.json();
+                this.waking = false;
+                return;
+              }
+            } catch (_) {}
+
+            // サーバーが応答しない → 起動待ち画面を表示してリトライ
+            this.waking = true;
+            this.retryCountdown = RETRY_SEC;
+            await new Promise(resolve => {
+              const timer = setInterval(() => {
+                this.retryCountdown--;
+                if (this.retryCountdown <= 0) {
+                  clearInterval(timer);
+                  resolve();
+                }
+              }, 1000);
+            });
+          }
+          // タイムアウト
+          this.waking = false;
+          this.error = 'サーバーへの接続がタイムアウトしました。ページを再読み込みしてください。';
         },
 
         get cacheStatusText() {
